@@ -1,6 +1,5 @@
-app.py
-chatbot.csv
-chatbot_model.pkl
-vectorizer.pkl
-requirements.txt
-README.md
+pandas
+numpy
+scikit-learn
+nltk
+joblib

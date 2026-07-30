@@ -4,15 +4,21 @@ import pickle
 import nltk
 import string
 
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 
-# Download NLTK Data
-nltk.download('punkt')
-nltk.download('stopwords')
+# =========================
+# Download Required NLTK Data
+# =========================
 
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords")
+
+# =========================
 # Page Configuration
+# =========================
 
 st.set_page_config(
     page_title="ML Chatbot",
@@ -20,39 +26,39 @@ st.set_page_config(
     layout="centered"
 )
 
+# =========================
 # Load Model Files
+# =========================
 
 @st.cache_resource
 def load_model():
 
-    model = pickle.load(
-        open("chatbot_model.pkl", "rb")
-    )
+    with open("chatbot_model.pkl", "rb") as f:
+        model = pickle.load(f)
 
-    vectorizer = pickle.load(
-        open("vectorizer.pkl", "rb")
-    )
+    with open("vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
 
     return model, vectorizer
 
 
-
 model, vectorizer = load_model()
 
+# =========================
 # Load Dataset
+# =========================
 
 @st.cache_data
 def load_data():
 
-    df = pd.read_csv("chatbot.csv")
-
-    return df
-
+    return pd.read_csv("chatbot.csv")
 
 
 df = load_data()
 
+# =========================
 # Text Preprocessing
+# =========================
 
 stemmer = PorterStemmer()
 
@@ -63,11 +69,10 @@ stop_words = set(
 
 def clean_text(text):
 
-    # lowercase
+    # Convert to lowercase
     text = text.lower()
 
-
-    # remove punctuation
+    # Remove punctuation
     text = text.translate(
         str.maketrans(
             "",
@@ -76,179 +81,142 @@ def clean_text(text):
         )
     )
 
+    # Simple tokenization
+    words = text.split()
 
-    # tokenize
-    words = word_tokenize(text)
-
-
-    # remove stop words + stemming
+    # Remove stopwords and apply stemming
     words = [
         stemmer.stem(word)
         for word in words
         if word not in stop_words
     ]
 
-
     return " ".join(words)
 
 
-# Chatbot Prediction Function
+# =========================
+# Chatbot Response Function
+# =========================
 
 def chatbot_response(user_text):
 
+    try:
 
-    cleaned = clean_text(user_text)
+        cleaned = clean_text(user_text)
 
+        # Convert text into TF-IDF vector
+        vector = vectorizer.transform([cleaned])
 
-    # Convert text into numbers
+        # Predict intent
+        intent = model.predict(vector)[0]
 
-    vector = vectorizer.transform(
-        [cleaned]
-    )
+        # Confidence score
+        confidence = model.predict_proba(vector).max()
 
+        # Low confidence handling
+        if confidence < 0.40:
+            return (
+                "Sorry, I am not sure about that. "
+                "Please ask something related to AI, Machine Learning, Python, or Data Science."
+            )
 
-    # Prediction
+        # Get response from dataset
+        responses = df[
+            df["intent"] == intent
+        ]["response"]
 
-    intent = model.predict(vector)[0]
+        if len(responses) > 0:
+            return responses.iloc[0]
 
+        return "Sorry, I couldn't find an appropriate response."
 
-    # Confidence score
-
-    probability = model.predict_proba(vector)
-
-    confidence = probability.max()
-
-
-
-    # Low confidence handling
-
-    if confidence < 0.40:
-
-        return (
-            "Sorry, I am not sure about that. "
-            "Please ask something related to AI, ML, Python, or Data Science."
-        )
-
-
-
-    # Get response from CSV
-
-    response = df[
-        df["intent"] == intent
-    ]["response"].iloc[0]
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
-    return response
-
-
-
-# Session Chat History
+# =========================
+# Session State
+# =========================
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
 
 
-
-# User Interface
-
+# =========================
+# Main UI
+# =========================
 
 st.title("🤖 Machine Learning Chatbot")
 
 st.write(
-    "Ask questions about Python, AI, Machine Learning, Deep Learning and Data Science."
+    "Ask questions about Python, AI, Machine Learning, Deep Learning, NLP, and Data Science."
 )
 
-
-
-# Display old messages
-
+# Display chat history
 for message in st.session_state.messages:
 
-    with st.chat_message(
-        message["role"]
-    ):
-
-        st.write(
-            message["content"]
-        )
-
-
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
 # User Input
-
 user_input = st.chat_input(
     "Type your message here..."
 )
 
-
-
 if user_input:
 
-
-    # Display user message
-
+    # Save user message
     st.session_state.messages.append(
         {
-            "role":"user",
-            "content":user_input
+            "role": "user",
+            "content": user_input
         }
     )
-
 
     with st.chat_message("user"):
-
         st.write(user_input)
 
+    # Generate response
+    answer = chatbot_response(user_input)
 
-
-    # Get bot response
-
-    answer = chatbot_response(
-        user_input
-    )
-
-
-    # Display bot message
-
+    # Save bot response
     st.session_state.messages.append(
         {
-            "role":"assistant",
-            "content":answer
+            "role": "assistant",
+            "content": answer
         }
     )
 
-
     with st.chat_message("assistant"):
-
         st.write(answer)
 
-
+# =========================
 # Sidebar
+# =========================
 
 with st.sidebar:
 
+    st.header("📌 About Chatbot")
 
-    st.header("About Chatbot")
+    st.write("""
+This chatbot uses:
 
+✅ NLP Text Processing
 
-    st.write(
-        """
-        This chatbot uses:
+✅ Stopword Removal
 
-        ✅ NLP Text Processing
+✅ Stemming
 
-        ✅ TF-IDF Vectorization
+✅ TF-IDF Vectorization
 
-        ✅ Logistic Regression
+✅ Logistic Regression
 
-        ✅ Streamlit
+✅ Streamlit
+""")
 
-        """
-    )
+    st.markdown("---")
 
-
-    if st.button("Clear Chat"):
+    if st.button("🗑️ Clear Chat"):
 
         st.session_state.messages = []
 
